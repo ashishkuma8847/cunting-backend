@@ -9,10 +9,9 @@ app.use(cors());
 app.use(express.json());
 
 // DB connection
-const password = encodeURIComponent(process.env.MONGOOSEPASS);
 mongoose
   .connect(
-    `mongodb+srv://ashish:${password}@cluster0.e2dgvha.mongodb.net/?retryWrites=true&w=majority`
+    process.env.MONGOOSEPASS
   )
   .then(() => {
     console.log("Database connected");
