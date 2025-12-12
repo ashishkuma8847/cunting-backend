@@ -7,38 +7,42 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-const Port= process.env.Port 
-// DB connection
-const password = encodeURIComponent(process.env.MONGOOSEPASS);
+
+// Environment variables
+const PORT = process.env.PORT || 3000;
+const DB_USER = process.env.DB_USER;
+const DB_PASS = encodeURIComponent(process.env.MONGOOSEPASS);
+const DB_NAME = process.env.DB_NAME;
+
+// MongoDB connection
 mongoose
   .connect(
-    `mongodb+srv://ashish:${password}@cluster0.e2dgvha.mongodb.net/?retryWrites=true&w=majority`
+    `mongodb+srv://${DB_USER}:${DB_PASS}@cluster0.e2dgvha.mongodb.net/${DB_NAME}?retryWrites=true&w=majority`
   )
   .then(() => {
-    console.log("Database connected");
-    app.listen(Port, () => console.log("Server running on port", Port));
+    console.log("✅ Database connected successfully");
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
-  .catch((err) => console.log(err));
+  .catch((err) => console.log("❌ MongoDB connection error:", err));
 
-// Schema
+// ---------------- Schema -----------------
 const schema = new mongoose.Schema({
   name: String,
   time: String,
   fields: [String],
   rows: [
-  {
-    values: [String],
-    createdAt: String
-  }
-]
+    {
+      values: [String],
+      createdAt: String,
+    },
+  ],
 });
 
 const model = mongoose.model("firstschema", schema);
 
-// ---------------- API ROUTES -----------------
+// ---------------- Utility -----------------
 function getFormattedDateTime() {
   const date = new Date();
-
   const options = {
     weekday: "long",
     year: "numeric",
@@ -47,62 +51,27 @@ function getFormattedDateTime() {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: true
+    hour12: true,
   };
-
   return date.toLocaleString("en-IN", options);
 }
 
-// Get all
+// ---------------- API Routes -----------------
+
+// Get all holders
 app.get("/getall", async (req, res) => {
   try {
     const data = await model.find();
-    res.status(201).json({ message: "data get sucessfully", data });
-  } catch (error) {
-    res.status(500).json({ message: "data not get ", error: error.message });
-  }
-});
-
-// Add Field
-app.post("/addField/:holderId", async (req, res) => {
-  try {
-    const { field } = req.body;
-
-    const updated = await model.findByIdAndUpdate(
-      req.params.holderId,
-      { $push: { fields: field } },
-      { new: true }
-    );
-
-    res.json(updated);
+    res.status(200).json({ message: "Data retrieved successfully", data });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
-
-// Add Row
-app.post("/addRow/:holderId", async (req, res) => {
-  try {
-    const { values } = req.body;
-
-    const updated = await model.findByIdAndUpdate(
-      req.params.holderId,
-      { $push: { rows: { values, createdAt: getFormattedDateTime() } } },
-      { new: true }
-    );
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 
 // Add Holder
 app.post("/addHolder", async (req, res) => {
   try {
     const { name } = req.body;
-
     if (!name) return res.status(400).json({ message: "Name is required" });
 
     const exist = await model.findOne({ name: name.trim() });
@@ -111,21 +80,46 @@ app.post("/addHolder", async (req, res) => {
 
     const newHolder = await model.create({
       name,
-      time: getFormattedDateTime()   // ← HERE
+      time: getFormattedDateTime(),
     });
 
-    res.status(201).json({
-      message: "Holder created successfully",
-      data: newHolder,
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(201).json({ message: "Holder created successfully", data: newHolder });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
+// Add Field to a Holder
+app.post("/addField/:holderId", async (req, res) => {
+  try {
+    const { field } = req.body;
+    const updated = await model.findByIdAndUpdate(
+      req.params.holderId,
+      { $push: { fields: field } },
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
-// Delete Input Field + Auto Remove from Rows
+// Add Row to a Holder
+app.post("/addRow/:holderId", async (req, res) => {
+  try {
+    const { values } = req.body;
+    const updated = await model.findByIdAndUpdate(
+      req.params.holderId,
+      { $push: { rows: { values, createdAt: getFormattedDateTime() } } },
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete Field
 app.delete("/deleteField/:holderId/:fieldIndex", async (req, res) => {
   try {
     const { holderId, fieldIndex } = req.params;
@@ -134,16 +128,10 @@ app.delete("/deleteField/:holderId/:fieldIndex", async (req, res) => {
     const holder = await model.findById(holderId);
     if (!holder) return res.status(404).json({ message: "Holder not found" });
 
-    // Remove field
     holder.fields.splice(index, 1);
-
-    // Remove related column data from each row
-    holder.rows.forEach((row) => {
-      row.values.splice(index, 1);
-    });
+    holder.rows.forEach((row) => row.values.splice(index, 1));
 
     await holder.save();
-
     res.json(holder);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -154,40 +142,33 @@ app.delete("/deleteField/:holderId/:fieldIndex", async (req, res) => {
 app.delete("/deleteRow/:holderId/:rowIndex", async (req, res) => {
   try {
     const { holderId, rowIndex } = req.params;
-
     const index = Number(rowIndex);
 
     const holder = await model.findById(holderId);
     if (!holder) return res.status(404).json({ message: "Holder not found" });
 
     holder.rows.splice(index, 1);
-
     await holder.save();
-
     res.json(holder);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-
+// Delete Holder
 app.delete("/deleteHolder/:id", async (req, res) => {
   try {
-    const { id } = req.params;
+    const holder = await model.findById(req.params.id);
+    if (!holder) return res.status(404).json({ message: "Holder not found" });
 
-    const holder = await model.findById(id);
-    if (!holder)
-      return res.status(404).json({ message: "Holder not found" });
-
-    await model.findByIdAndDelete(id);
-
+    await model.findByIdAndDelete(req.params.id);
     res.json({ message: "Holder deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Get Holder Data
+// Get Holder by ID
 app.get("/holder/:id", async (req, res) => {
   try {
     const holder = await model.findById(req.params.id);
@@ -196,6 +177,3 @@ app.get("/holder/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
-
-
