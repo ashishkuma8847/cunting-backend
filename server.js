@@ -7,15 +7,16 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+const Port= process.env.Port 
 // DB connection
+const password = encodeURIComponent(process.env.MONGOOSEPASS);
 mongoose
   .connect(
-    process.env.MONGOOSEPASS
+    `mongodb+srv://ashish:${password}@cluster0.e2dgvha.mongodb.net/?retryWrites=true&w=majority`
   )
   .then(() => {
     console.log("Database connected");
-    app.listen(3000, () => console.log("Server running on port 3000"));
+    app.listen(Port, () => console.log("Server running on port", Port));
   })
   .catch((err) => console.log(err));
 
