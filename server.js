@@ -74,20 +74,27 @@ function getFormattedDateTime() {
 // JWT authentication middleware
 // ---------------- Authorization Middleware -----------------
 function verifyToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader) return res.status(401).json({ message: "Token missing" });
+  const authHeader = req.headers.authorization;
 
-  const token = authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Token missing" });
+  console.log("AUTH HEADER 👉", authHeader); // 👈 debugging
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Token missing" });
+  }
+
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : authHeader;
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.id; // logged-in user id store
+    req.userId = decoded.id;
     next();
   } catch (err) {
     return res.status(403).json({ message: "Invalid token" });
   }
 }
+
 
 
 
